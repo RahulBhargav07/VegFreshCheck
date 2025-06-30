@@ -1,68 +1,78 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import JSONResponse
+import base64
+import requests
+from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
-import requests, base64, io
-from bioclip_utils import reclassify_with_clip
 
 app = FastAPI()
 
-API_KEY = "YOUR_API_KEY"
-MODEL_ID = "vegetable-classification-yekfv/1"  # Replace if different
+# Replace with your actual Roboflow API key and model ID
+ROBOFLOW_API_KEY = "YOUR_API_KEY"
+MODEL_ID = "vegetable-classification-yekfv/1"
 
+# Optional: Resize image before sending (faster & less memory)
+def resize_image(image: Image.Image, max_size=(512, 512)):
+    image.thumbnail(max_size)
+    return image
 
-def create_annotated_image(image, predictions):
+def annotate_image(image: Image.Image, predictions):
     draw = ImageDraw.Draw(image)
     try:
-        font = ImageFont.truetype("arial.ttf", 20)
+        font = ImageFont.truetype("arial.ttf", 16)
     except:
         font = ImageFont.load_default()
 
     for pred in predictions:
-        x, y, w, h = pred['x'], pred['y'], pred['width'], pred['height']
-        left, top = x - w/2, y - h/2
-        right, bottom = x + w/2, y + h/2
+        x, y, w, h = pred["x"], pred["y"], pred["width"], pred["height"]
+        left, top = x - w / 2, y - h / 2
+        right, bottom = x + w / 2, y + h / 2
+        label = f"{pred['class']}: {pred['confidence']:.2f}"
 
-        crop = image.crop((left, top, right, bottom))
-        new_label, new_conf = reclassify_with_clip(crop)
-
-        label = f"{new_label}: {new_conf:.2f}"
-        draw.rectangle([left, top, right, bottom], outline="blue", width=3)
-
-        bbox = draw.textbbox((0, 0), label, font=font)
-        text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        draw.rectangle([left, top - text_h - 10, left + text_w + 10, top], fill="blue")
-        draw.text((left + 5, top - text_h - 5), label, fill="white", font=font)
+        draw.rectangle([left, top, right, bottom], outline="green", width=2)
+        text_w, text_h = draw.textsize(label, font=font)
+        draw.rectangle([left, top - text_h - 4, left + text_w + 4, top], fill="green")
+        draw.text((left + 2, top - text_h - 2), label, fill="white", font=font)
 
     return image
 
+@app.post("/detect")
+async def detect(file: UploadFile = File(...)):
+    try:
+        image = Image.open(BytesIO(await file.read())).convert("RGB")
+        image = resize_image(image)
+        buffered = BytesIO()
+        image.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-@app.post("/predict/")
-async def predict(file: UploadFile = File(...)):
-    image_bytes = await file.read()
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    
-    # Prepare image for Roboflow
-    encoded = base64.b64encode(image_bytes).decode("utf-8")
-    url = f"https://detect.roboflow.com/{MODEL_ID}"
-    params = {"api_key": API_KEY, "confidence": 0.3, "overlap": 0.3, "format": "json"}
+        response = requests.post(
+            f"https://detect.roboflow.com/{MODEL_ID}",
+            params={
+                "api_key": ROBOFLOW_API_KEY,
+                "confidence": 0.4,
+                "overlap": 0.3,
+                "format": "json"
+            },
+            data=img_str,
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
 
-    response = requests.post(url, params=params, data=encoded,
-                             headers={"Content-Type": "application/json"})
+        if response.status_code != 200:
+            return JSONResponse(status_code=500, content={"error": response.text})
 
-    if response.status_code != 200:
-        return {"error": f"Roboflow API error: {response.status_code}"}
+        result = response.json()
+        predictions = result.get("predictions", [])
 
-    result = response.json()
-    predictions = result.get("predictions", [])
+        # Annotate and save image
+        annotated_image = annotate_image(image.copy(), predictions)
+        annotated_buffer = BytesIO()
+        annotated_image.save(annotated_buffer, format="JPEG")
+        annotated_b64 = base64.b64encode(annotated_buffer.getvalue()).decode("utf-8")
 
-    if not predictions:
-        return {"message": "No detections found."}
+        return {
+            "detections": predictions,
+            "annotated_image": f"data:image/jpeg;base64,{annotated_b64}"
+        }
 
-    annotated = create_annotated_image(image.copy(), predictions)
-    buffered = io.BytesIO()
-    annotated.save(buffered, format="JPEG")
-    annotated_b64 = base64.b64encode(buffered.getvalue()).decode()
-
-    return {
-        "detections": predictions,
-        "annotated_image": f"data:image/jpeg;base64,{annotated_b64}"
-    }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
