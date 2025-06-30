@@ -28,7 +28,7 @@ app.add_middleware(
 class VegetableDetectionService:
     def __init__(self):
         self.api_key = os.getenv("ROBOFLOW_API_KEY", "NVfp8h9atJEAWzsw1eZ0")  # Replace if needed
-        self.model_id = "vegetable-classification-yekfv/1"
+        self.model_id = "vegetable-classification-yekfv/4"
         self.base_url = "https://detect.roboflow.com"
 
     def create_annotated_image(self, image: Image.Image, predictions: list) -> str:
