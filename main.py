@@ -8,12 +8,14 @@ from io import BytesIO
 import os
 from typing import Dict, Any
 
+# === FastAPI App ===
 app = FastAPI(
     title="Vegetable Freshness Detection API",
     version="1.0.0",
-    description="Detects and classifies vegetables as fresh or rotten using Roboflow detection model."
+    description="Detects and classifies vegetables as fresh or rotten using a Roboflow detection model."
 )
 
+# === CORS Middleware ===
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,27 +24,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# === Detection Service ===
 class VegetableDetectionService:
     def __init__(self):
-        self.api_key = os.getenv("ROBOFLOW_API_KEY", "NVfp8h9atJEAWzsw1eZ0")
+        self.api_key = os.getenv("ROBOFLOW_API_KEY", "NVfp8h9atJEAWzsw1eZ0")  # Replace if needed
         self.model_id = "vegetable-classification-yekfv/1"
         self.base_url = "https://detect.roboflow.com"
 
     def create_annotated_image(self, image: Image.Image, predictions: list) -> str:
         draw = ImageDraw.Draw(image)
+
         try:
             font_paths = [
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
             ]
             font = None
-            for font_path in font_paths:
+            for path in font_paths:
                 try:
-                    font = ImageFont.truetype(font_path, 20)
+                    font = ImageFont.truetype(path, 20)
                     break
                 except:
                     continue
-            if font is None:
+            if not font:
                 font = ImageFont.load_default()
         except:
             font = ImageFont.load_default()
@@ -63,10 +67,10 @@ class VegetableDetectionService:
         image.save(buffer, format="JPEG", quality=95)
         return base64.b64encode(buffer.getvalue()).decode()
 
-    async def detect_vegetables(self, image_file: UploadFile) -> Dict[str, Any]:
+    async def detect_vegetables(self, file: UploadFile) -> Dict[str, Any]:
         try:
-            image_bytes = await image_file.read()
-            img_b64 = base64.b64encode(image_bytes).decode('utf-8')
+            image_bytes = await file.read()
+            img_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
             url = f"{self.base_url}/{self.model_id}"
             params = {
@@ -115,12 +119,14 @@ class VegetableDetectionService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+# === Initialize Service ===
 veg_service = VegetableDetectionService()
 
+# === Routes ===
 @app.get("/")
 async def root():
     return {
-        "message": "Vegetable Freshness Detection API is live",
+        "message": "Vegetable Freshness Detection API is live ✅",
         "status": "running",
         "endpoints": {
             "detect": "/detect (POST)",
@@ -134,12 +140,12 @@ async def health():
     return {"status": "healthy"}
 
 @app.post("/detect")
-async def detect_vegetable(image: UploadFile = File(...)):
-    if not image.content_type.startswith("image/"):
+async def detect_vegetable(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid file type. Must be an image.")
 
-    if hasattr(image, "size") and image.size and image.size > 10 * 1024 * 1024:
+    if hasattr(file, "size") and file.size and file.size > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image too large. Max size is 10MB.")
 
-    result = await veg_service.detect_vegetables(image)
+    result = await veg_service.detect_vegetables(file)
     return JSONResponse(content=result)
