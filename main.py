@@ -1,21 +1,22 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
-import base64
-import requests
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
+import base64
+import requests
 
 app = FastAPI()
 
-# Replace with your actual Roboflow API key and model ID
+# Update these with your real values
 ROBOFLOW_API_KEY = "YOUR_API_KEY"
-MODEL_ID = "vegetable-classification-yekfv/1"
+MODEL_ID = "vegetable-classification-yekfv/1"  # Roboflow model ID
 
-# Optional: Resize image before sending (faster & less memory)
+# Resize image to keep payload light
 def resize_image(image: Image.Image, max_size=(512, 512)):
     image.thumbnail(max_size)
     return image
 
+# Annotate predictions with bounding boxes and class labels
 def annotate_image(image: Image.Image, predictions):
     draw = ImageDraw.Draw(image)
     try:
@@ -36,15 +37,21 @@ def annotate_image(image: Image.Image, predictions):
 
     return image
 
+@app.get("/")
+async def root():
+    return {"status": "Veg freshness API is live 🎉"}
+
 @app.post("/detect")
 async def detect(file: UploadFile = File(...)):
     try:
+        # Load and preprocess image
         image = Image.open(BytesIO(await file.read())).convert("RGB")
         image = resize_image(image)
         buffered = BytesIO()
         image.save(buffered, format="JPEG")
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+        # Call Roboflow Hosted API
         response = requests.post(
             f"https://detect.roboflow.com/{MODEL_ID}",
             params={
@@ -63,7 +70,7 @@ async def detect(file: UploadFile = File(...)):
         result = response.json()
         predictions = result.get("predictions", [])
 
-        # Annotate and save image
+        # Annotate image with predictions
         annotated_image = annotate_image(image.copy(), predictions)
         annotated_buffer = BytesIO()
         annotated_image.save(annotated_buffer, format="JPEG")
