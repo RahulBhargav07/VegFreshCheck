@@ -1,5 +1,5 @@
 fastapi
 uvicorn
 requests
-pillow
 python-multipart
+Pillow
