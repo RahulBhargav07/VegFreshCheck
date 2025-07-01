@@ -28,12 +28,11 @@ app.add_middleware(
 class VegetableDetectionService:
     def __init__(self):
         self.api_key = os.getenv("ROBOFLOW_API_KEY", "NVfp8h9atJEAWzsw1eZ0")  # Replace if needed
-        self.model_id = "vegetable-classification-yekfv/4"
+        self.model_id = "vegetable-classification-yekfv/5"
         self.base_url = "https://detect.roboflow.com"
 
     def create_annotated_image(self, image: Image.Image, predictions: list) -> str:
         draw = ImageDraw.Draw(image)
-
         try:
             font_paths = [
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -75,8 +74,8 @@ class VegetableDetectionService:
             url = f"{self.base_url}/{self.model_id}"
             params = {
                 "api_key": self.api_key,
-                "confidence": 0.1,
-                "overlap": 0.3,
+                "confidence": 0.35,  # Recommended threshold
+                "overlap": 0.4,
                 "format": "json"
             }
 
@@ -94,6 +93,9 @@ class VegetableDetectionService:
             result = response.json()
             predictions = result.get("predictions", [])
 
+            # Sort predictions by confidence
+            predictions = sorted(predictions, key=lambda x: x['confidence'], reverse=True)
+
             annotated_b64 = None
             if predictions:
                 img = Image.open(BytesIO(image_bytes))
@@ -101,6 +103,7 @@ class VegetableDetectionService:
 
             return {
                 "success": True,
+                "message": "Detections found." if predictions else "No vegetable detected. Try again with clearer lighting or angle.",
                 "detection_count": len(predictions),
                 "predictions": [
                     {
