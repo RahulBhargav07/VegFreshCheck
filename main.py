@@ -74,8 +74,8 @@ class VegetableDetectionService:
             url = f"{self.base_url}/{self.model_id}"
             params = {
                 "api_key": self.api_key,
-                "confidence": 0.35,  # Recommended threshold
-                "overlap": 0.4,
+                "confidence": 0.3,  # Recommended threshold
+                "overlap": 0.3,
                 "format": "json"
             }
 
