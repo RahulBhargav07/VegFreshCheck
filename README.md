@@ -1,6 +1,6 @@
 # 🥦 Smart Vegetable Freshness Detection System
 
-A computer vision–based vegetable classifier designed to support farmers and food supply chains in identifying **fresh** vs **rotten** vegetables. Powered by Roboflow's YOLOv8 model and deployed via FastAPI, this system enables real-time freshness detection through mobile apps, automation pipelines, or field cameras.
+A computer vision–based vegetable classifier designed to support farmers and food supply chains in identifying **fresh** vs **rotten** vegetables. Powered by Roboflow's YOLOv11m model and deployed via FastAPI, this system enables real-time freshness detection through mobile apps, automation pipelines, or field cameras.
 
 ---
 
